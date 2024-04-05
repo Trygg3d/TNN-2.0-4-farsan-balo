@@ -1,0 +1,28 @@
+1. Define the structure of the neural network:
+   - Input layer to accept time-series data
+   - Kernel Filter layer to extract features
+   - Time Attention layer to focus on important features
+   - Output layer to predict future data
+
+2. Implement the Kernel Filter:
+   - Initialize filters with learnable weights
+   - Define convolution operation across time dimension
+
+3. Develop the Time Attention mechanism:
+   - Compute attention scores for each time step
+   - Normalize the attention scores
+   - Apply attention scores to kernel filter outputs
+
+4. Assemble the network:
+   - Stack the layers in sequence
+   - Define forward pass to process data through each layer
+
+5. Training loop:
+   - Load data and split into training and validation sets
+   - Train the model using backpropagation and an optimizer
+   - Validate the model on the validation set
+   - Adjust hyperparameters and repeat as necessary
+
+6. Evaluation:
+   - Assess model performance using metrics such as RMSE and MAE
+   - Compare to baseline models if provided
