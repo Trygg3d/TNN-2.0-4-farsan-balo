@@ -197,6 +197,27 @@ df = pd.read_csv(r'C:\Users\andru\OneDrive\Skrivbord\S&P 500 yfinance data ohlc 
 columns_to_drop = ['Date','Volume','Dividends','Stock Splits']
 df = df.drop(columns=columns_to_drop)
 
+# Assuming 'df' is your DataFrame with the columns ['Open', 'High', 'Low', 'Close']
+
+# Missing Value Treatment: Linear Interpolation
+df = df.interpolate(method='linear', axis=0).fillna(method='bfill').fillna(method='ffill')
+
+# Calculate the mean and standard deviation for each feature
+mean = df.mean()
+std_dev = df.std()
+
+# Define the upper and lower bounds for normal data (within 3σ)
+lower_bound = mean - 3 * std_dev
+upper_bound = mean + 3 * std_dev
+
+# Replace outliers with the median of the corresponding feature
+for column in ['Open', 'High', 'Low', 'Close']:
+    median_value = df[column].median()
+    df[column] = np.where(df[column] > upper_bound[column], median_value, df[column])
+    df[column] = np.where(df[column] < lower_bound[column], median_value, df[column])
+
+# Continue with your preprocessing steps...
+
 # Preprocess data: scale values and create sequences if needed
 scaler = MinMaxScaler(feature_range=(-1, 1))
 scaled_data = scaler.fit_transform(df[['Open', 'High', 'Low', 'Close']].values)
