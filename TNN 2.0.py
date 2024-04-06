@@ -14,24 +14,21 @@ print(f"Using device: {device}")
 class KernelFilter(nn.Module):
     def __init__(self, input_dim, kernel_size, num_kernels):
         super(KernelFilter, self).__init__()
-        self.convs = nn.ModuleList([nn.Conv1d(in_channels=input_dim, out_channels=1, kernel_size=kernel_size) for _ in range(num_kernels)])
-    
+        self.conv = nn.Conv1d(in_channels=input_dim, out_channels=num_kernels, kernel_size=kernel_size)
     def forward(self, x):
-        # x shape: (batch_size, time_series_length, input_dim)
-        x = x.permute(0, 2, 1)  # Switch to (batch_size, input_dim, time_series_length)
-        outputs = [conv(x).squeeze(1) for conv in self.convs]
-        return torch.cat(outputs, dim=1)  # Concatenate along the feature dimension
-
+        # The input x should already be in the shape (batch_size, input_dim, time_series_length)
+        return self.conv(x)
 # Define the Time Attention Layer
 class TimeAttention(nn.Module):
     def __init__(self, feature_dim):
         super(TimeAttention, self).__init__()
-        self.attention = nn.Linear(feature_dim, 1)
+        self.attention = nn.Linear(feature_dim, feature_dim)
     
     def forward(self, x):
         # x shape: (batch_size, time_series_length, feature_dim)
         attention_weights = torch.softmax(self.attention(x), dim=1)
-        return torch.sum(attention_weights * x, dim=1)  # Weighted sum of features over time
+        attended_features = attention_weights * x # Apply attention weights
+        return attended_features.sum(dim=1).unsqueeze(1)  # Sum along the time_series_length dimension
 
 # Define the TNN Model
 class TimeSeriesNeuralNetwork(nn.Module):
@@ -39,23 +36,27 @@ class TimeSeriesNeuralNetwork(nn.Module):
         super(TimeSeriesNeuralNetwork, self).__init__()
         self.kernel_filter = KernelFilter(input_dim, kernel_size, num_kernels)
         self.time_attention = TimeAttention(num_kernels)
-        self.output_layer = nn.Linear(num_kernels, output_dim)
+        self.output_layer = nn.Linear(1, output_dim)
     
     def forward(self, x):
-        # x shape: (batch_size, time_series_length, input_dim)
-        x = x.permute(0, 2, 1)  # Switch to (batch_size, input_dim, time_series_length)
-        features = self.kernel_filter(x)
+        # x should already be of shape (batch_size, time_series_length, input_dim)
+        # You need to permute it to (batch_size, input_dim, time_series_length) to match Conv1d input requirements
+        x = x.permute(0, 2, 1)
+        features = self.kernel_filter(x).squeeze(2)# Since kernel size is 2 and sequence length is 2, L will be 1
+        # Now features should be of shape (batch_size, num_kernels*output_channels, L)
+        # Where L is the resulting sequence length from the convolutions
         attention_output = self.time_attention(features)
-        return self.output_layer(attention_output[:, -1, :])  # Use only the last time step for prediction
-
+        # Assuming you still want to use only the last time step for prediction
+        return self.output_layer(attention_output)
+    
 # Hyperparameters
 input_dim = 5 # This should match your time-series data input dimensions
-kernel_size = 3  # Example kernel size
-num_kernels = 5  # Example number of kernels
+kernel_size = 2  # Example kernel size
+num_kernels = 2  # Example number of kernels
 output_dim = 1  # Output dimension for prediction
 
 # Initialize the model
-model = TimeSeriesNeuralNetwork(input_dim=5, kernel_size=3, num_kernels=5, output_dim=1).to(device)
+model = TimeSeriesNeuralNetwork(input_dim=5, kernel_size=2, num_kernels=2, output_dim=1).to(device)
 print(model)
 
 # Define loss function and optimizer
@@ -84,26 +85,26 @@ tensor_data = torch.tensor(scaled_data, dtype=torch.float32)
 # Define a function to create sequences
 def create_sequences(input_data, sequence_length):
     sequences = []
+    labels  = []
     for i in range(len(input_data) - sequence_length):
         sequences.append(input_data[i:i+sequence_length])
-    
-    return torch.stack(sequences[:-1]), input_data[sequence_length:]
+        labels.append(input_data[i + sequence_length])
+
+    return torch.stack(sequences), torch.stack(labels)
 
 # Example: Create sequences of 1 days
-sequence_length = 1
+sequence_length = 2
 sequential_data, sequential_labels = create_sequences(tensor_data, sequence_length)
 
 # Split data into training and test sets
-train_data, test_data, train_labels, test_labels = train_test_split(
-    sequential_data, sequential_labels, test_size=0.2, shuffle=False
-)
+train_data, test_data, train_labels, test_labels = train_test_split(sequential_data, sequential_labels, test_size=0.2, shuffle=False)
 
 # Create DataLoader for batch processing
 train_dataset = TensorDataset(train_data, train_labels)
 train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False)  # Shuffling is usually not done for time series
 
 # Set up the model, loss function, and optimizer
-model = TimeSeriesNeuralNetwork(input_dim=5, kernel_size=3, num_kernels=5, output_dim=1).to(device)
+model = TimeSeriesNeuralNetwork(input_dim=5, kernel_size=2, num_kernels=2, output_dim=1).to(device)
 criterion = nn.MSELoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 
